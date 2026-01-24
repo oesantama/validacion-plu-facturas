@@ -8,7 +8,7 @@
         <div class="q-gutter-sm row items-center">
           <q-badge color="orange" v-if="!apiKey" label="Sin API Key" />
           <q-badge color="green" v-else label="IA Online" />
-          <div class="text-caption text-bold text-white bg-blue q-px-xs rounded-borders">v1.4.1 (KEYS FIXED)</div>
+          <div class="text-caption text-bold text-white bg-blue q-px-xs rounded-borders">v1.4.2 (FIXED UI & API)</div>
         </div>
       </q-toolbar>
     </q-header>
@@ -46,8 +46,8 @@
                       <input type="file" ref="folderInput" webkitdirectory directory multiple style="display: none" @change="handleFolderSelected" />
                       <input type="file" ref="filesInput" multiple accept="application/pdf" style="display: none" @change="handleFilesSelected" />
 
-                      <q-btn color="primary" label="Carpeta" icon="folder_open" @click="$refs.folderInput.click()" :loading="analyzing" unelevated no-caps shadow-2 />
-                      <q-btn color="secondary" label="Seleccionar" icon="add_files" @click="$refs.filesInput.click()" :loading="analyzing" unelevated no-caps shadow-2 />
+                      <q-btn color="primary" label="Carpeta" icon="folder_open" @click="$refs.folderInput.click()" :loading="loadingMode === 'folder'" unelevated no-caps shadow-2 />
+                      <q-btn color="secondary" label="Seleccionar" icon="add_files" @click="$refs.filesInput.click()" :loading="loadingMode === 'files'" unelevated no-caps shadow-2 />
                       
                       <q-btn color="warning" label="Ver Duplicados" icon="collections_bookmark" @click="checkDuplicates" :disable="analyzing || results.length === 0" unelevated no-caps />
                       <q-btn v-if="showingDuplicates" color="info" label="Ver Todo" icon="history" @click="resetHistory" outline no-caps />
@@ -125,6 +125,8 @@ const $q = useQuasar()
 // State
 // Acepta múltiples claves separadas por coma: 'key1, key2, key3'
 const apiKey = ref(import.meta.env.VITE_GEMINI_API_KEY || 'AIzaSyAVnmxmiUp3tqP8BlKxIzFDHYZRcB9iVAw,AIzaSyDgKYYlHs7sV8JWtwGAAITR7WUH3qtofQA,AIzaSyAVcDc76nbO0iG0FIpHy_yyD9CI3CHbu_E,AIzaSyBYX28LhyKBgWf6nEqdpbf_KYSdj-nklD0') 
+// Estado de carga específico: 'folder', 'files' o null
+const loadingMode = ref(null)
 const analyzing = ref(false)
 const results = ref([])
 const progressInfo = ref('')
@@ -179,8 +181,11 @@ const handleFolderSelected = async (e) => {
       path: f.webkitRelativePath,
       name: f.name
     }))
-  if (files.length > 0) runAnalysis(files)
-  e.target.value = '' // Reset para permitir volver a cargar lo mismo
+  if (files.length > 0) {
+    loadingMode.value = 'folder'
+    runAnalysis(files)
+  }
+  e.target.value = ''
 }
 
 const handleFilesSelected = async (e) => {
@@ -190,8 +195,11 @@ const handleFilesSelected = async (e) => {
       path: f.name,
       name: f.name
     }))
-  if (files.length > 0) runAnalysis(files)
-  e.target.value = '' // Reset
+  if (files.length > 0) {
+    loadingMode.value = 'files'
+    runAnalysis(files)
+  }
+  e.target.value = ''
 }
 
 const runAnalysis = async (files) => {
@@ -284,6 +292,7 @@ const runAnalysis = async (files) => {
     }
   } finally {
     analyzing.value = false
+    loadingMode.value = null
     progressInfo.value = ''
   }
 }
