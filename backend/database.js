@@ -6,12 +6,12 @@ const sequelize = process.env.DATABASE_URL
   ? new Sequelize(process.env.DATABASE_URL, {
       dialect: 'postgres',
       logging: false,
-      dialectOptions: {
+      dialectOptions: process.env.DB_SSL === 'true' ? {
         ssl: {
           require: true,
           rejectUnauthorized: false
         }
-      }
+      } : {}
     })
   : new Sequelize({
       dialect: 'sqlite',
