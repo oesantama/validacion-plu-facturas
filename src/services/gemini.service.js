@@ -67,19 +67,27 @@ class GeminiService {
 
     const base64Data = await this._arrayBufferToBase64(fileBuffer);
     
-    let retries = 5; 
+    let retries = 10; // Aumentamos reintentos globales
     const modelIds = [
       "gemini-1.5-flash", 
+      "gemini-1.5-flash-002",
+      "gemini-1.5-flash-8b-latest",
       "gemini-1.5-flash-latest",
       "gemini-2.0-flash-exp", 
       "gemini-1.5-pro",
-      "gemini-1.5-pro-latest"
     ];
     let currentModelIndex = 0;
 
     while (retries > 0) {
         try {
-            const result = await this.model.generateContent([
+            // Re-inicializamos el modelo si cambió el índice
+            const currentModelName = modelIds[currentModelIndex];
+            const activeModel = this.genAI.getGenerativeModel({ 
+              model: currentModelName,
+              generationConfig: { responseMimeType: "application/json" }
+            });
+
+            const result = await activeModel.generateContent([
                 prompt,
                 {
                     inlineData: {
@@ -98,52 +106,51 @@ class GeminiService {
             return parsed.matches || [];
         } catch (error) {
             const errorMsg = error.toString().toLowerCase();
-            console.error(`[Gemini Error] Falló con ${modelIds[currentModelIndex]}:`, errorMsg);
+            const currentModelName = modelIds[currentModelIndex];
             
-            // 1. Manejo de Modelo no encontrado (404) o No soportado -> Cambiar Modelo
-            if ((errorMsg.includes("404") || errorMsg.includes("not found") || errorMsg.includes("not supported")) && currentModelIndex < modelIds.length - 1) {
-                currentModelIndex++;
-                console.warn(`[Gemini] Modelo ${modelIds[currentModelIndex-1]} falló. Probando alternativo: ${modelIds[currentModelIndex]}`);
-                this.model = this.genAI.getGenerativeModel({ 
-                  model: modelIds[currentModelIndex],
-                  generationConfig: { responseMimeType: "application/json" }
-                });
-                continue; 
+            console.error(`[Gemini Error] Falló con ${currentModelName}:`, errorMsg);
+            
+            // 1. Manejo de Modelo no encontrado (404) o No soportado -> Probar siguiente modelo
+            if (errorMsg.includes("404") || errorMsg.includes("not found") || errorMsg.includes("not supported")) {
+                if (currentModelIndex < modelIds.length - 1) {
+                    currentModelIndex++;
+                    console.warn(`[Gemini] Modelo ${currentModelName} no disponible. Saltando a: ${modelIds[currentModelIndex]}`);
+                    continue; 
+                }
             }
 
             // 2. Manejo de Saturación (429) -> ROTAR KEY o ESPERAR
             if (errorMsg.includes("429") || errorMsg.includes("quota") || errorMsg.includes("limit")) {
-                // Intentamos rotar la clave primero
+                // Si hay más claves, rotamos inmediatamente
                 if (this._rotateKey()) {
                     console.warn("[Gemini] Clave rotada con éxito. Reintentando con nueva clave...");
-                    // Al rotar clave, reiniciamos el modelo al base por si fuera un tema de cuota por modelo
+                    // Al rotar clave, reiniciamos el modelo al primero por si la nueva clave sí tiene acceso
                     currentModelIndex = 0;
-                    this.model = this.genAI.getGenerativeModel({ 
-                      model: modelIds[currentModelIndex],
-                      generationConfig: { responseMimeType: "application/json" }
-                    });
                     continue; 
                 }
 
-                // Si no hay más claves (o es la única), activamos backoff
-                const waitTime = (6 - retries) * 10000; 
-                console.warn(`[Gemini] Cuota excedida en todas las claves. Reintentando en ${waitTime/1000}s...`);
+                // Si no hay más claves, intentamos extraer el tiempo de espera del error o usamos backoff
+                let waitTime = 30000; // 30s por defecto
+                const match = errorMsg.match(/retry in ([\d.]+)s/);
+                if (match) {
+                    waitTime = (parseFloat(match[1]) + 2) * 1000;
+                } else {
+                    waitTime = (11 - retries) * 10000; // Incremento progresivo
+                }
+
+                console.warn(`[Gemini] Cuota agotada en todas las claves. Esperando ${Math.round(waitTime/1000)}s antes de reintentar...`);
                 await this._sleep(waitTime);
                 retries--;
+                // Reiniciamos modelos para probar suerte con la espera
+                currentModelIndex = 0;
                 continue;
             } 
             
-            // Si llegamos aquí y es un error de análisis JSON o similar, no reintentamos
-            if (error instanceof SyntaxError) {
-                console.error("Error de formato JSON en la respuesta de Gemini");
-                throw error;
-            }
-
-            // Otros errores desconocidos: reintentamos si quedan retries
+            // Seguridad ante errores de red o temporales
             retries--;
             if (retries > 0) {
-                console.warn(`[Gemini] Reintentando tras error inesperado (${retries} intentos restantes)...`);
-                await this._sleep(2000);
+                console.warn(`[Gemini] Error inesperado. Reintentando (${retries} intentos restantes)...`);
+                await this._sleep(5000);
                 continue;
             }
 
