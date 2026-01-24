@@ -1,0 +1,26 @@
+{
+  "name": "validacion-plu-facturas",
+  "version": "1.0.0",
+  "description": "Validador de PLU y Cédulas con Gemini AI",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "@quasar/extras": "^1.16.4",
+    "axios": "^1.6.2",
+    "file-saver": "^2.0.5",
+    "pdfjs-dist": "^4.0.379",
+    "quasar": "^2.14.2",
+    "vue": "^3.3.11",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@quasar/vite-plugin": "^1.6.0",
+    "@vitejs/plugin-vue": "^4.5.2",
+    "sass": "^1.69.5",
+    "vite": "^5.0.10"
+  }
+}
