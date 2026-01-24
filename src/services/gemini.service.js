@@ -25,7 +25,7 @@ class GeminiService {
     console.log(`[Gemini] Usando API Key índice ${this.currentKeyIndex + 1}/${this.apiKeys.length} (${key.slice(0, 5)}...)`);
     
     this.genAI = new GoogleGenerativeAI(key);
-    // Usamos gemini-1.5-flash oficial por defecto
+    // Probamos con gemini-1.5-flash como base
     this.model = this.genAI.getGenerativeModel({ 
       model: "gemini-1.5-flash",
       generationConfig: { responseMimeType: "application/json" }
@@ -68,7 +68,13 @@ class GeminiService {
     const base64Data = await this._arrayBufferToBase64(fileBuffer);
     
     let retries = 5; 
-    const modelIds = ["gemini-1.5-flash", "gemini-2.0-flash-exp", "gemini-1.5-pro"];
+    const modelIds = [
+      "gemini-1.5-flash", 
+      "gemini-1.5-flash-latest",
+      "gemini-2.0-flash-exp", 
+      "gemini-1.5-pro",
+      "gemini-1.5-pro-latest"
+    ];
     let currentModelIndex = 0;
 
     while (retries > 0) {
@@ -92,11 +98,12 @@ class GeminiService {
             return parsed.matches || [];
         } catch (error) {
             const errorMsg = error.toString().toLowerCase();
+            console.error(`[Gemini Error] Falló con ${modelIds[currentModelIndex]}:`, errorMsg);
             
-            // 1. Manejo de Modelo no encontrado (404) -> Cambiar Modelo
-            if ((errorMsg.includes("404") || errorMsg.includes("not found")) && currentModelIndex < modelIds.length - 1) {
+            // 1. Manejo de Modelo no encontrado (404) o No soportado -> Cambiar Modelo
+            if ((errorMsg.includes("404") || errorMsg.includes("not found") || errorMsg.includes("not supported")) && currentModelIndex < modelIds.length - 1) {
                 currentModelIndex++;
-                console.warn(`[Gemini] Modelo falló. Probando alternativo: ${modelIds[currentModelIndex]}`);
+                console.warn(`[Gemini] Modelo ${modelIds[currentModelIndex-1]} falló. Probando alternativo: ${modelIds[currentModelIndex]}`);
                 this.model = this.genAI.getGenerativeModel({ 
                   model: modelIds[currentModelIndex],
                   generationConfig: { responseMimeType: "application/json" }
@@ -108,25 +115,42 @@ class GeminiService {
             if (errorMsg.includes("429") || errorMsg.includes("quota") || errorMsg.includes("limit")) {
                 // Intentamos rotar la clave primero
                 if (this._rotateKey()) {
-                    console.warn("[Gemini] Clave rotada con éxito. Reintentando inmediatamente...");
-                    // No restamos retries para darle oportunidad a la nueva clave
+                    console.warn("[Gemini] Clave rotada con éxito. Reintentando con nueva clave...");
+                    // Al rotar clave, reiniciamos el modelo al base por si fuera un tema de cuota por modelo
+                    currentModelIndex = 0;
+                    this.model = this.genAI.getGenerativeModel({ 
+                      model: modelIds[currentModelIndex],
+                      generationConfig: { responseMimeType: "application/json" }
+                    });
                     continue; 
                 }
 
                 // Si no hay más claves (o es la única), activamos backoff
                 const waitTime = (6 - retries) * 10000; 
-                console.warn(`[Gemini] Cuota excedida en todas las claves. Esperando ${waitTime/1000}s...`);
+                console.warn(`[Gemini] Cuota excedida en todas las claves. Reintentando en ${waitTime/1000}s...`);
                 await this._sleep(waitTime);
                 retries--;
                 continue;
             } 
             
-            // Otros errores
-            console.error("Error crítico en GeminiService:", error);
+            // Si llegamos aquí y es un error de análisis JSON o similar, no reintentamos
+            if (error instanceof SyntaxError) {
+                console.error("Error de formato JSON en la respuesta de Gemini");
+                throw error;
+            }
+
+            // Otros errores desconocidos: reintentamos si quedan retries
+            retries--;
+            if (retries > 0) {
+                console.warn(`[Gemini] Reintentando tras error inesperado (${retries} intentos restantes)...`);
+                await this._sleep(2000);
+                continue;
+            }
+
             throw error;
         }
     }
-    throw new Error("Se agotaron los intentos y claves disponibles.");
+    throw new Error("Se agotaron los intentos, modelos y claves disponibles.");
   }
 
   _sleep(ms) {
