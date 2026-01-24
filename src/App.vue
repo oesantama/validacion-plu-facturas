@@ -42,8 +42,13 @@
                     <div class="text-h6 text-primary q-pr-md">Base de Datos Logística</div>
                     <q-space />
                     <div class="q-gutter-sm">
-                      <q-btn color="primary" label="Carpeta" icon="folder_open" @click="startAnalysis('folder')" :loading="analyzing" unelevated no-caps />
-                      <q-btn color="secondary" label="Seleccionar" icon="add_files" @click="startAnalysis('files')" :loading="analyzing" unelevated no-caps />
+                      <!-- Inputs Ocultos Reales para evitar que se "unan" -->
+                      <input type="file" ref="folderInput" webkitdirectory directory multiple style="display: none" @change="handleFolderSelected" />
+                      <input type="file" ref="filesInput" multiple accept="application/pdf" style="display: none" @change="handleFilesSelected" />
+
+                      <q-btn color="primary" label="Carpeta" icon="folder_open" @click="$refs.folderInput.click()" :loading="analyzing" unelevated no-caps shadow-2 />
+                      <q-btn color="secondary" label="Seleccionar" icon="add_files" @click="$refs.filesInput.click()" :loading="analyzing" unelevated no-caps shadow-2 />
+                      
                       <q-btn color="warning" label="Ver Duplicados" icon="collections_bookmark" @click="checkDuplicates" :disable="analyzing || results.length === 0" unelevated no-caps />
                       <q-btn v-if="showingDuplicates" color="info" label="Ver Todo" icon="history" @click="resetHistory" outline no-caps />
                       <q-btn color="negative" label="Limpiar Historial" icon="delete_sweep" @click="confirmClear" :disable="analyzing || results.length === 0" outline no-caps />
@@ -140,6 +145,10 @@ const pagination = ref({
   rowsPerPage: 10
 })
 
+// Refs para los inputs de archivos
+const folderInput = ref(null)
+const filesInput = ref(null)
+
 onMounted(async () => {
   results.value = await storageService.getRecords()
 })
@@ -161,25 +170,43 @@ const columns = [
 ]
 
 // Methods
-const startAnalysis = async (mode = 'folder') => {
+// Methods para el manejo de archivos separados
+const handleFolderSelected = async (e) => {
+  const files = Array.from(e.target.files)
+    .filter(f => f.name.toLowerCase().endsWith('.pdf'))
+    .map(f => ({
+      file: f,
+      path: f.webkitRelativePath,
+      name: f.name
+    }))
+  if (files.length > 0) runAnalysis(files)
+  e.target.value = '' // Reset para permitir volver a cargar lo mismo
+}
+
+const handleFilesSelected = async (e) => {
+  const files = Array.from(e.target.files)
+    .map(f => ({
+      file: f,
+      path: f.name,
+      name: f.name
+    }))
+  if (files.length > 0) runAnalysis(files)
+  e.target.value = '' // Reset
+}
+
+const runAnalysis = async (files) => {
   if (!apiKey.value) {
     $q.notify({ message: 'Debe ingresar su API Key', color: 'negative' })
     return
   }
 
-  let files = []
-  try {
-    if (mode === 'folder') {
-      files = await fileService.getRecursiveFiles()
-    } else {
-      files = await fileService.getSpecificFiles()
-    }
-
     if (files.length === 0) return
 
     geminiService.init(apiKey.value)
-    analyzing.value = true
-    progressValue.value = 0
+    
+    try {
+      analyzing.value = true
+      progressValue.value = 0
 
     const totalFiles = files.length
     let processedCount = 0
