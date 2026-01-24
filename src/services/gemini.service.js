@@ -67,14 +67,13 @@ class GeminiService {
 
     const base64Data = await this._arrayBufferToBase64(fileBuffer);
     
-    let retries = 10; // Aumentamos reintentos globales
+    let retries = 15; 
     const modelIds = [
-      "gemini-1.5-flash", 
-      "gemini-1.5-flash-002",
-      "gemini-1.5-flash-8b-latest",
-      "gemini-1.5-flash-latest",
       "gemini-2.0-flash-exp", 
+      "gemini-1.5-flash",
+      "gemini-1.5-flash-8b",
       "gemini-1.5-pro",
+      "gemini-1.5-flash-001"
     ];
     let currentModelIndex = 0;
 
