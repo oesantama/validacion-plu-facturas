@@ -140,8 +140,8 @@ const pagination = ref({
   rowsPerPage: 10
 })
 
-onMounted(() => {
-  results.value = storageService.getRecords()
+onMounted(async () => {
+  results.value = await storageService.getRecords()
 })
 
 const columns = [
@@ -244,7 +244,7 @@ const startAnalysis = async (mode = 'folder') => {
     }
 
     if (newRecordsBatch.length > 0) {
-      storageService.appendRecords(newRecordsBatch)
+      await storageService.appendRecords(newRecordsBatch)
     }
 
     $q.notify({
@@ -282,8 +282,8 @@ const customFilter = (rows, terms, cols, getCellValue) => {
   })
 }
 
-const checkDuplicates = () => {
-  const all = storageService.getRecords()
+const checkDuplicates = async () => {
+  const all = await storageService.getRecords()
   if (all.length === 0) return
 
   const groups = {}
@@ -325,15 +325,15 @@ const deleteRow = (row) => {
     cancel: true,
     persistent: true,
     ok: { color: 'negative', label: 'Eliminar', flat: true }
-  }).onOk(() => {
-    storageService.removeRecord(row.id)
+  }).onOk(async () => {
+    await storageService.removeRecord(row.id)
     results.value = results.value.filter(r => r.id !== row.id)
     $q.notify({ message: 'Registro eliminado', color: 'info' })
   })
 }
 
-const resetHistory = () => {
-  results.value = storageService.getRecords()
+const resetHistory = async () => {
+  results.value = await storageService.getRecords()
   showingDuplicates.value = false
 }
 
@@ -344,8 +344,8 @@ const confirmClear = () => {
     cancel: true,
     persistent: true,
     ok: { color: 'negative', label: 'Borrar Todo', flat: true }
-  }).onOk(() => {
-    storageService.clear()
+  }).onOk(async () => {
+    await storageService.clear()
     results.value = []
     $q.notify({ message: 'Historial borrado', color: 'info' })
   })

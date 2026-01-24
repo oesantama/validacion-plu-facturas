@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: validacion_db
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=validacion_plu
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: validacion_backend
+    restart: always
+    environment:
+      - PORT=3000
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/validacion_plu
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3004:3000"
+
+  frontend:
+    build: .
+    container_name: validacion_frontend
+    restart: always
+    environment:
+      - VITE_API_URL=/api
+    ports:
+      - "3003:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

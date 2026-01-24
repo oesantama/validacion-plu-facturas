@@ -1,42 +1,51 @@
-class StorageService {
-  constructor() {
-    this.key = 'validacion_plu_db';
-  }
+import axios from 'axios';
 
-  getRecords() {
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+
+class StorageService {
+  async getRecords() {
     try {
-      const data = localStorage.getItem(this.key);
-      return data ? JSON.parse(data) : [];
+      const response = await axios.get(`${API_URL}/records`);
+      return response.data;
     } catch (e) {
-      console.error('Error al leer de localStorage:', e);
+      console.error('Error al leer del backend:', e);
       return [];
     }
   }
 
-  saveRecords(records) {
+  async saveRecords(records) {
     try {
-      localStorage.setItem(this.key, JSON.stringify(records));
-      return true;
+      const response = await axios.post(`${API_URL}/records`, records);
+      return response.data;
     } catch (e) {
-      console.error('Error al guardar en localStorage:', e);
+      console.error('Error al guardar en el backend:', e);
       return false;
     }
   }
 
-  appendRecords(newRecords) {
-    const current = this.getRecords();
-    const updated = [...newRecords, ...current]; // Los más nuevos arriba
-    return this.saveRecords(updated);
+  async appendRecords(newRecords) {
+    // El backend maneja el append via el POST que recibe un array
+    return this.saveRecords(newRecords);
   }
 
-  removeRecord(id) {
-    const current = this.getRecords();
-    const updated = current.filter(r => r.id !== id);
-    this.saveRecords(updated);
+  async removeRecord(id) {
+    try {
+      await axios.delete(`${API_URL}/records/${id}`);
+      return true;
+    } catch (e) {
+      console.error('Error al eliminar en el backend:', e);
+      return false;
+    }
   }
 
-  clear() {
-    localStorage.removeItem(this.key);
+  async clear() {
+    try {
+      await axios.delete(`${API_URL}/records`);
+      return true;
+    } catch (e) {
+      console.error('Error al limpiar el backend:', e);
+      return false;
+    }
   }
 }
 
