@@ -69,12 +69,13 @@ class GeminiService {
     
     let retries = 15; 
     const modelIds = [
-      "gemini-2.0-flash-exp", 
       "gemini-1.5-flash",
+      "gemini-1.5-flash-latest",
       "gemini-1.5-flash-001",
       "gemini-1.5-flash-002",
       "gemini-1.5-pro",
-      "gemini-1.5-flash-8b"
+      "gemini-1.5-flash-8b",
+      "gemini-2.0-flash-exp"
     ];
     let currentModelIndex = 0;
 

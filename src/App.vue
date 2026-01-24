@@ -8,7 +8,7 @@
         <div class="q-gutter-sm row items-center">
           <q-badge color="orange" v-if="!apiKey" label="Sin API Key" />
           <q-badge color="green" v-else label="IA Online" />
-          <div class="text-caption text-bold text-white bg-blue q-px-xs rounded-borders">v1.4.2 (FIXED UI & API)</div>
+          <div class="text-caption text-bold text-white bg-blue q-px-xs rounded-borders">v1.4.5 (STABLE UI & IA)</div>
         </div>
       </q-toolbar>
     </q-header>
