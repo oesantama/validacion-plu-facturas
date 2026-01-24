@@ -27,8 +27,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    ports:
-      - "3004:3000"
+    # El backend no necesita puerto expuesto hacia afuera en Coolify si usamos el proxy de Nginx
+    expose:
+      - "3000"
 
   frontend:
     build: .
@@ -37,7 +38,7 @@ services:
     environment:
       - VITE_API_URL=/api
     ports:
-      - "3003:80"
+      - "80:80"
     depends_on:
       - backend
 
