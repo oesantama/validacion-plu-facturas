@@ -78,19 +78,38 @@ class GeminiService {
     ];
     let currentModelIndex = 0;
 
+    // Guardamos la lista original para poder restaurarla si todos fallan por 429
+    const originalModelIds = [...modelIds];
+    
     while (retries > 0) {
         try {
             const currentModelName = modelIds[currentModelIndex];
             
-            // Verificamos que el índice sea válido antes de intentar
+            // Si nos quedamos sin modelos, verificamos si fue por 429 (saturación) o 404 (no existen)
             if (!currentModelName) {
-                 // Si nos quedamos sin modelos, reiniciar ciclo o error
                  console.warn("[Gemini] No hay más modelos para probar en este ciclo.");
+                 
+                 // Si la lista original tenía modelos pero ahora está vacía, fueron eliminados por 404
+                 if (originalModelIds.length > 0 && modelIds.length === 0) {
+                     throw new Error("Todos los modelos retornaron 404 (no existen). Verifica los nombres de modelo.");
+                 }
+                 
+                 // Si aún hay modelos en la lista original, significa que fueron 429 (saturación)
+                 // Intentamos rotar clave y restaurar la lista
                  if (this._rotateKey()) {
+                    console.warn("[Gemini] Restaurando lista de modelos y reintentando con nueva clave...");
+                    modelIds = [...originalModelIds]; // Restaurar lista completa
                     currentModelIndex = 0;
                     continue;
                  }
-                 throw new Error("Todos los modelos fallaron y no quedan claves.");
+                 
+                 // Si no hay más claves, esperamos y restauramos
+                 console.warn("[Gemini] Todas las claves saturadas. Esperando 30s antes de reintentar...");
+                 await this._sleep(30000);
+                 modelIds = [...originalModelIds]; // Restaurar lista
+                 currentModelIndex = 0;
+                 retries--;
+                 continue;
             }
 
             const activeModel = this.genAI.getGenerativeModel({ 
@@ -132,24 +151,38 @@ class GeminiService {
 
             // 2. Manejo de Saturación (429) -> ROTAR KEY o ESPERAR
             if (errorMsg.includes("429") || errorMsg.includes("quota") || errorMsg.includes("limit")) {
-                // Si hay más claves, rotamos inmediatamente
+                // Marcamos este modelo como saturado temporalmente removiéndolo
+                console.warn(`[Gemini] Modelo ${currentModelName} saturado (429). Probando siguiente modelo...`);
+                modelIds.splice(currentModelIndex, 1);
+                
+                // Si aún quedan modelos en la lista, probamos el siguiente
+                if (modelIds.length > 0) {
+                    // currentModelIndex ya apunta al siguiente por el splice
+                    if (currentModelIndex >= modelIds.length) {
+                        currentModelIndex = 0;
+                    }
+                    continue;
+                }
+                
+                // Si no quedan modelos, intentamos rotar clave
                 if (this._rotateKey()) {
-                    console.warn("[Gemini] Clave rotada con éxito. Reintentando...");
-                    // Mantenemos el mismo modelo (currentModelIndex) porque este SÍ existe, solo se agotó la quota
+                    console.warn("[Gemini] Clave rotada. Restaurando modelos...");
+                    modelIds = [...originalModelIds];
+                    currentModelIndex = 0;
                     continue; 
                 }
 
-                // Si no hay más claves, backoff
+                // Si no hay más claves, esperamos
                 let waitTime = 30000; 
                 const match = errorMsg.match(/retry in ([\d.]+)s/);
                 if (match) {
                     waitTime = (parseFloat(match[1]) + 2) * 1000;
-                } else {
-                    waitTime = (11 - retries) * 5000; 
                 }
 
-                console.warn(`[Gemini] Cuota agotada en todas las claves. Esperando ${Math.round(waitTime/1000)}s antes de reintentar modelo ${currentModelName}...`);
+                console.warn(`[Gemini] Todas las claves saturadas. Esperando ${Math.round(waitTime/1000)}s...`);
                 await this._sleep(waitTime);
+                modelIds = [...originalModelIds]; // Restaurar lista
+                currentModelIndex = 0;
                 retries--;
                 continue;
             } 
