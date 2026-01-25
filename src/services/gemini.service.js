@@ -68,21 +68,31 @@ class GeminiService {
     const base64Data = await this._arrayBufferToBase64(fileBuffer);
     
     let retries = 15; 
-    const modelIds = [
+    // Priorizamos gemini-2.0-flash-exp que es el que parece estar disponible (aunque saturado)
+    // Eliminamos las variantes que daban 404 seguro para no perder tiempo
+    let modelIds = [
+      "gemini-2.0-flash-exp",
       "gemini-1.5-flash",
-      "gemini-1.5-flash-latest",
-      "gemini-1.5-flash-001",
-      "gemini-1.5-flash-002",
-      "gemini-1.5-pro",
       "gemini-1.5-flash-8b",
-      "gemini-2.0-flash-exp"
+      "gemini-1.5-pro"
     ];
     let currentModelIndex = 0;
 
     while (retries > 0) {
         try {
-            // Re-inicializamos el modelo si cambió el índice
             const currentModelName = modelIds[currentModelIndex];
+            
+            // Verificamos que el índice sea válido antes de intentar
+            if (!currentModelName) {
+                 // Si nos quedamos sin modelos, reiniciar ciclo o error
+                 console.warn("[Gemini] No hay más modelos para probar en este ciclo.");
+                 if (this._rotateKey()) {
+                    currentModelIndex = 0;
+                    continue;
+                 }
+                 throw new Error("Todos los modelos fallaron y no quedan claves.");
+            }
+
             const activeModel = this.genAI.getGenerativeModel({ 
               model: currentModelName,
               generationConfig: { responseMimeType: "application/json" }
@@ -111,43 +121,40 @@ class GeminiService {
             
             console.error(`[Gemini Error] Falló con ${currentModelName}:`, errorMsg);
             
-            // 1. Manejo de Modelo no encontrado (404) o No soportado -> Probar siguiente modelo
+            // 1. Manejo de Modelo no encontrado (404) o No soportado
             if (errorMsg.includes("404") || errorMsg.includes("not found") || errorMsg.includes("not supported")) {
-                if (currentModelIndex < modelIds.length - 1) {
-                    currentModelIndex++;
-                    console.warn(`[Gemini] Modelo ${currentModelName} no disponible. Saltando a: ${modelIds[currentModelIndex]}`);
-                    continue; 
-                }
+                console.warn(`[Gemini] Modelo ${currentModelName} no disponible (404). Eliminándolo de la lista de intentos.`);
+                // Lo sacamos de la lista para no volver a intentarlo ni siquiera con otra key
+                modelIds.splice(currentModelIndex, 1);
+                // No incrementamos currentModelIndex, porque al borrar, el siguiente elemento toma esta posición
+                continue; 
             }
 
             // 2. Manejo de Saturación (429) -> ROTAR KEY o ESPERAR
             if (errorMsg.includes("429") || errorMsg.includes("quota") || errorMsg.includes("limit")) {
                 // Si hay más claves, rotamos inmediatamente
                 if (this._rotateKey()) {
-                    console.warn("[Gemini] Clave rotada con éxito. Reintentando con nueva clave...");
-                    // Al rotar clave, reiniciamos el modelo al primero por si la nueva clave sí tiene acceso
-                    currentModelIndex = 0;
+                    console.warn("[Gemini] Clave rotada con éxito. Reintentando...");
+                    // Mantenemos el mismo modelo (currentModelIndex) porque este SÍ existe, solo se agotó la quota
                     continue; 
                 }
 
-                // Si no hay más claves, intentamos extraer el tiempo de espera del error o usamos backoff
-                let waitTime = 30000; // 30s por defecto
+                // Si no hay más claves, backoff
+                let waitTime = 30000; 
                 const match = errorMsg.match(/retry in ([\d.]+)s/);
                 if (match) {
                     waitTime = (parseFloat(match[1]) + 2) * 1000;
                 } else {
-                    waitTime = (11 - retries) * 10000; // Incremento progresivo
+                    waitTime = (11 - retries) * 5000; 
                 }
 
-                console.warn(`[Gemini] Cuota agotada en todas las claves. Esperando ${Math.round(waitTime/1000)}s antes de reintentar...`);
+                console.warn(`[Gemini] Cuota agotada en todas las claves. Esperando ${Math.round(waitTime/1000)}s antes de reintentar modelo ${currentModelName}...`);
                 await this._sleep(waitTime);
                 retries--;
-                // Reiniciamos modelos para probar suerte con la espera
-                currentModelIndex = 0;
                 continue;
             } 
             
-            // Seguridad ante errores de red o temporales
+            // Error genérico
             retries--;
             if (retries > 0) {
                 console.warn(`[Gemini] Error inesperado. Reintentando (${retries} intentos restantes)...`);

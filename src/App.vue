@@ -8,7 +8,7 @@
         <div class="q-gutter-sm row items-center">
           <q-badge color="orange" v-if="!apiKey" label="Sin API Key" />
           <q-badge color="green" v-else label="IA Online" />
-          <div class="text-caption text-bold text-white bg-blue q-px-xs rounded-borders">v1.4.5 (STABLE UI & IA)</div>
+          <div class="text-caption text-bold text-white bg-orange q-px-xs rounded-borders">v1.4.6 (FIX-GEMINI)</div>
         </div>
       </q-toolbar>
     </q-header>
@@ -152,6 +152,7 @@ const folderInput = ref(null)
 const filesInput = ref(null)
 
 onMounted(async () => {
+  console.log('%c[DEPLOY CHECK] v1.4.6 - Gemini Fix Activo', 'background: #4CAF50; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;')
   results.value = await storageService.getRecords()
 })
 
