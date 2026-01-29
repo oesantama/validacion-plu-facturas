@@ -72,7 +72,6 @@ class GeminiService {
     
     // Configuraciones EXACTAS de ChepitApp (ajustadas: quitamos la que da 404)
     const configurations = [
-        { model: "gemini-1.5-flash", version: "v1beta" }, // La más estable
         { model: "gemini-flash-latest", version: "v1beta" },
         { model: "gemini-pro-latest", version: "v1beta" },
         { model: "gemini-2.0-flash", version: "v1beta" },
