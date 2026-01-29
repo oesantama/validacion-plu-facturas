@@ -107,6 +107,33 @@
         </div>
       </q-page>
     </q-page-container>
+  <!-- Dialogo de Errores -->
+    <q-dialog v-model="showErrorDialog">
+      <q-card style="min-width: 500px">
+        <q-card-section>
+          <div class="text-h6 text-negative">Archivos No Procesados</div>
+          <div class="text-caption">Los siguientes archivos fallaron y deben cargarse manualmente:</div>
+        </q-card-section>
+
+        <q-card-section class="q-pt-none">
+          <q-list bordered separator>
+            <q-item v-for="(file, index) in failedFiles" :key="index">
+              <q-item-section avatar>
+                <q-icon name="error" color="negative" />
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>{{ file.name }}</q-item-label>
+                <q-item-label caption lines="2">{{ file.reason }}</q-item-label>
+              </q-item-section>
+            </q-item>
+          </q-list>
+        </q-card-section>
+
+        <q-card-actions align="right">
+          <q-btn flat label="Cerrar" color="primary" v-close-popup />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </q-layout>
 </template>
 
@@ -146,6 +173,10 @@ const pagination = ref({
   page: 1,
   rowsPerPage: 10
 })
+
+// Control de Errores
+const failedFiles = ref([])
+const showErrorDialog = ref(false)
 
 // Refs para los inputs de archivos
 const folderInput = ref(null)
@@ -216,6 +247,7 @@ const runAnalysis = async (files) => {
     try {
       analyzing.value = true
       progressValue.value = 0
+      failedFiles.value = [] // Reiniciar lista de fallos
 
     const totalFiles = files.length
     let processedCount = 0
@@ -252,10 +284,17 @@ const runAnalysis = async (files) => {
         }
       } catch (error) {
         console.error(`Error procesando ${fileObj.name}:`, error)
+        
+        // Registrar el fallo
+        failedFiles.value.push({
+            name: fileObj.name,
+            reason: error.message || 'Error desconocido'
+        })
+
         // Si fallan todos los reintentos, aumentamos la demora base
         currentDelay += 5000;
         $q.notify({ 
-          message: `Error en ${fileObj.name}. Aumentando espera a ${currentDelay/1000}s.`, 
+          message: `Error en ${fileObj.name}. Saltando...`, 
           color: 'orange',
           position: 'bottom-right'
         })
@@ -283,10 +322,21 @@ const runAnalysis = async (files) => {
       await storageService.appendRecords(newRecordsBatch)
     }
 
-    $q.notify({
-      message: `Proceso terminado. ${newRecordsBatch.length} registros nuevos.`,
-      color: 'info'
-    })
+    // Notificación final
+    if (failedFiles.value.length > 0) {
+        showErrorDialog.value = true
+        $q.notify({
+            message: `Proceso terminado. ${newRecordsBatch.length} cargados, ${failedFiles.value.length} fallidos.`,
+            color: 'warning',
+            timeout: 5000
+        })
+    } else {
+        $q.notify({
+            message: `Proceso terminado. ${newRecordsBatch.length} registros nuevos.`,
+            color: 'info'
+        })
+    }
+
   } catch (error) {
     if (error.name !== 'AbortError') {
        $q.notify({ message: `Error general: ${error.message}`, color: 'negative' })
