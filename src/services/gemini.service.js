@@ -72,6 +72,7 @@ class GeminiService {
     
     // Configuraciones EXACTAS de ChepitApp (ajustadas: quitamos la que da 404)
     const configurations = [
+        { model: "gemini-1.5-flash", version: "v1beta" }, // La más estable
         { model: "gemini-flash-latest", version: "v1beta" },
         { model: "gemini-pro-latest", version: "v1beta" },
         { model: "gemini-2.0-flash", version: "v1beta" },
@@ -111,7 +112,7 @@ class GeminiService {
                         prompt,
                         { inlineData: { data: base64Data, mimeType: mimeType } }
                     ]),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout de solicitud")), 25000))
+                    new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout de solicitud")), 60000))
                 ]);
 
                 const response = await resultWithTimeout.response;
