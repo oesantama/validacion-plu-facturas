@@ -70,9 +70,8 @@ class GeminiService {
 
     const base64Data = await this._arrayBufferToBase64(fileBuffer);
     
-    // Configuraciones EXACTAS de ChepitApp (Working Code)
+    // Configuraciones EXACTAS de ChepitApp (ajustadas: quitamos la que da 404)
     const configurations = [
-        { model: "gemini-1.5-flash", version: "v1" },
         { model: "gemini-flash-latest", version: "v1beta" },
         { model: "gemini-pro-latest", version: "v1beta" },
         { model: "gemini-2.0-flash", version: "v1beta" },

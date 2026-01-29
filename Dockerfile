@@ -3,6 +3,8 @@ FROM node:20-alpine as build-stage
 WORKDIR /app
 ARG VITE_API_URL=/api
 ENV VITE_API_URL=$VITE_API_URL
+ARG VITE_GEMINI_API_KEY
+ENV VITE_GEMINI_API_KEY=$VITE_GEMINI_API_KEY
 COPY package*.json ./
 RUN npm install
 COPY . .
