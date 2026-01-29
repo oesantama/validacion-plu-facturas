@@ -32,7 +32,11 @@ services:
       - "3000"
 
   frontend:
-    build: .
+    build: 
+      context: .
+      args:
+        - VITE_API_URL=/api
+        - VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY}
     container_name: validacion_frontend
     restart: always
     environment:

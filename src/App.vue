@@ -124,7 +124,7 @@ const $q = useQuasar()
 
 // State
 // Acepta múltiples claves separadas por coma: 'key1, key2, key3'
-const apiKey = ref(import.meta.env.VITE_GEMINI_API_KEY || 'AIzaSyBvsigFkaU8f8vHKFljzCQlhnjKG_aQdvM,AIzaSyBZSbGszwhYRLKQUsEpNDkNWwuktKcCHfo') 
+const apiKey = ref(import.meta.env.VITE_GEMINI_API_KEY || '') 
 // Estado de carga específico: 'folder', 'files' o null
 const loadingMode = ref(null)
 const analyzing = ref(false)
