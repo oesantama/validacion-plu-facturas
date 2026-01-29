@@ -92,14 +92,17 @@ class GeminiService {
         // Probamos CADA configuración con la llave actual
         for (const config of configurations) {
             try {
-                // Reiniciamos cliente con la config específica si es necesario, 
-                // pero GenerateContent se hace sobre el modelo.
-                // IMPORTANTE: En SDK nueva, la versión se pasa al getGenerativeModel
                 const genAI = new GoogleGenerativeAI(currentKey);
-                const activeModel = genAI.getGenerativeModel({ 
-                    model: config.model,
-                    generationConfig: { responseMimeType: "application/json" }
-                }, { 
+                
+                // IMPORTANTE: La API v1 lanza error 400 si se envía responseMimeType
+                // Solo lo enviamos si es v1beta (aunque v1beta está dando 404, por si acaso)
+                const modelParams = { model: config.model };
+                
+                if (config.version === 'v1beta') {
+                    modelParams.generationConfig = { responseMimeType: "application/json" };
+                }
+
+                const activeModel = genAI.getGenerativeModel(modelParams, { 
                     apiVersion: config.version 
                 });
 
