@@ -46,7 +46,7 @@
                       <input type="file" ref="folderInput" webkitdirectory directory multiple style="display: none" @change="handleFolderSelected" />
                       <input type="file" ref="filesInput" multiple accept="application/pdf" style="display: none" @change="handleFilesSelected" />
 
-                      <q-btn color="primary" label="Carpeta" icon="folder_open" @click="$refs.folderInput.click()" :loading="loadingMode === 'folder'" unelevated no-caps shadow-2 />
+                      <q-btn color="primary" label="Carpeta" @click="$refs.folderInput.click()" :loading="loadingMode === 'folder'" unelevated no-caps shadow-2 />
                       <q-btn color="secondary" label="Seleccionar" icon="add_files" @click="$refs.filesInput.click()" :loading="loadingMode === 'files'" unelevated no-caps shadow-2 />
                       
                       <q-btn color="warning" label="Ver Duplicados" icon="collections_bookmark" @click="checkDuplicates" :disable="analyzing || results.length === 0" unelevated no-caps />

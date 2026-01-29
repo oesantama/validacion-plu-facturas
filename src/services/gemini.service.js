@@ -50,12 +50,7 @@ class GeminiService {
 
   async analyzeDocument(fileBuffer, mimeType) {
     if (!this.genAI) this._initClient();
-    if (!this.model) {
-      if (this.apiKeys.length > 0) this._initClient();
-      else throw new Error("Servicio de IA no inicializado y sin claves.");
-    }
-
-    // Prompt optimizado para consumir menos tokens y ser más directo
+    
     const prompt = `
       Analiza este DOCUMENTO LOGÍSTICO y extrae TODOS los registros de entregas o facturas en un JSON.
       Formato: { "matches": [ {objeto} ] }
@@ -74,122 +69,98 @@ class GeminiService {
     `;
 
     const base64Data = await this._arrayBufferToBase64(fileBuffer);
-
-    let retries = 10;
-    // Priorizamos modelos estables y rápidos. El orden importa.
-    let modelIds = [
-      "gemini-1.5-flash",
-      "gemini-1.5-pro",
-      "gemini-2.0-flash-exp",
+    
+    // Configuraciones a probar, inspiradas en ChepitApp (Working Code)
+    // El SDK nuevo permite pasar { apiVersion: 'v1' } o 'v1beta'
+    const configurations = [
+      { model: "gemini-1.5-flash", version: "v1" },      // Prioridad ChepitApp
+      { model: "gemini-1.5-flash", version: "v1beta" },  // Estándar
+      { model: "gemini-1.5-pro", version: "v1" },
+      { model: "gemini-1.5-pro", version: "v1beta" },
+      { model: "gemini-2.0-flash-exp", version: "v1beta" }
     ];
 
-    // Copia para restaurar tras rotar key
-    const originalModelIds = [...modelIds];
-    let currentModelIndex = 0;
-
+    let retries = 10;
+    
     while (retries > 0) {
-      // Validación crítica: Si la lista de modelos se vació, intentar rotar key
-      if (modelIds.length === 0) {
-        console.warn(
-          "[Gemini] Se agotaron los modelos válidos con la clave actual.",
-        );
+        // Asegurar que tenemos una llave al inicio del ciclo
+        if (this.apiKeys.length === 0) throw new Error("No hay API Keys disponibles.");
+
+        const currentKey = this.apiKeys[this.currentKeyIndex];
+        let configSuccess = false;
+
+        // Probamos CADA configuración con la llave actual
+        for (const config of configurations) {
+            try {
+                // Reiniciamos cliente con la config específica si es necesario, 
+                // pero GenerateContent se hace sobre el modelo.
+                // IMPORTANTE: En SDK nueva, la versión se pasa al getGenerativeModel
+                const genAI = new GoogleGenerativeAI(currentKey);
+                const activeModel = genAI.getGenerativeModel({ 
+                    model: config.model,
+                    generationConfig: { responseMimeType: "application/json" }
+                }, { 
+                    apiVersion: config.version 
+                });
+
+                // Timeout de seguridad en la petición
+                const resultWithTimeout = await Promise.race([
+                    activeModel.generateContent([
+                        prompt,
+                        { inlineData: { data: base64Data, mimeType: mimeType } }
+                    ]),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout de solicitud")), 25000))
+                ]);
+
+                const response = await resultWithTimeout.response;
+                const text = response.text();
+                
+                if (!text) throw new Error("Respuesta vacía de Gemini");
+
+                const parsed = JSON.parse(text);
+                return parsed.matches || [];
+                
+                // Si llegamos aquí, ¡Éxito!
+                configSuccess = true;
+                break; 
+
+            } catch (error) {
+                const errorMsg = error.toString().toLowerCase();
+                
+                console.warn(`[Gemini] Falló config ${config.model} (${config.version}): ${errorMsg}`);
+
+                // 1. Manejo de Saturación (429) -> ROMPER BUCLE DE CONFIGS Y ROTAR KEY
+                if (errorMsg.includes("429") || errorMsg.includes("quota") || errorMsg.includes("limit")) {
+                    console.warn(`[Gemini] Quota excedida en llave ${this.currentKeyIndex}. Rotando...`);
+                    // Salimos del for de configs para rotar llave
+                    break; 
+                }
+
+                // 2. 404 Not Found -> Simplemente probamos la siguiente CONFIGURACIÓN del array
+                if (errorMsg.includes("404") || errorMsg.includes("not found")) {
+                    continue; // Probar siguiente config
+                }
+                
+                // Otros errores -> Probar siguiente config por si acaso
+                continue;
+            }
+        }
+
+        // Si alguna config funcionó, ya retornamos arriba. Si llegamos aquí, fallaron todas con esta Key.
+        
+        // Rotamos llave
         if (this._rotateKey()) {
-          console.log("[Gemini] Rotación exitosa. Restaurando modelos...");
-          modelIds = [...originalModelIds];
-          currentModelIndex = 0;
-          continue;
+            await this._sleep(1000); // Pequeña pausa
+            continue; // Reintentar while (retries) con nueva llave y todas las configs
         } else {
-          // Si no hay más keys y no hay modelos, error fatal
-          throw new Error(
-            "Fallo crítico: No hay modelos disponibles ni claves extra para probar.",
-          );
+            // Si no hay más llaves y falló todo (incluyendo 429s), esperamos
+            console.warn("[Gemini] Todas las llaves fallaron o saturadas. Esperando 10s...");
+            await this._sleep(10000);
+            retries--;
         }
-      }
-
-      // Asegurar índice seguro
-      if (currentModelIndex >= modelIds.length) currentModelIndex = 0;
-
-      const currentModelName = modelIds[currentModelIndex];
-
-      try {
-        const activeModel = this.genAI.getGenerativeModel({
-          model: currentModelName,
-          generationConfig: { responseMimeType: "application/json" },
-        });
-
-        // Timeout de seguridad en la petición
-        const resultWithTimeout = await Promise.race([
-          activeModel.generateContent([
-            prompt,
-            { inlineData: { data: base64Data, mimeType: mimeType } },
-          ]),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("Timeout de solicitud")), 25000),
-          ),
-        ]);
-
-        const response = await resultWithTimeout.response;
-        const text = response.text();
-
-        if (!text) throw new Error("Respuesta vacía de Gemini");
-
-        const parsed = JSON.parse(text);
-        return parsed.matches || [];
-      } catch (error) {
-        const errorMsg = error.toString().toLowerCase();
-        const isFatal = errorMsg.includes("fallo crítico");
-        if (isFatal) throw error; // No atrapar nuestro propio error fatal
-
-        console.error(`[Gemini Error] ${currentModelName}:`, errorMsg);
-
-        // 1. Manejo de 404 (Not Found) o No Soportado --> ELIMINAR MODELO de esta Key
-        if (
-          errorMsg.includes("404") ||
-          errorMsg.includes("not found") ||
-          errorMsg.includes("not supported")
-        ) {
-          console.warn(
-            `[Gemini] Eliminando modelo inválido: ${currentModelName}`,
-          );
-          modelIds.splice(currentModelIndex, 1);
-          // Al eliminar, el índice apunta al nuevo elemento, no incrementamos
-          continue;
-        }
-
-        // 2. Manejo de Saturación (429) --> ROTAR KEY o ESPERAR
-        if (
-          errorMsg.includes("429") ||
-          errorMsg.includes("quota") ||
-          errorMsg.includes("limit")
-        ) {
-          console.warn(`[Gemini] Saturación (429) en ${currentModelName}.`);
-
-          // Opción A: Rotar clave inmediatamente si hay disponible
-          if (this._rotateKey()) {
-            modelIds = [...originalModelIds]; // Restauramos todo con nueva key
-            currentModelIndex = 0;
-            continue;
-          }
-
-          // Opción B: Esperar (Backoff)
-          console.warn("[Gemini] Esperando 10s por cuota...");
-          await this._sleep(10000);
-          // Intentamos con el mismo modelo u otro? Mejor probamos el siguiente si hay
-          currentModelIndex++;
-          retries--;
-          continue;
-        }
-
-        // Otros errores
-        console.warn(`[Gemini] Error genérico. Reintentando...`);
-        retries--;
-        await this._sleep(2000);
-        currentModelIndex++;
-      }
     }
-    throw new Error(
-      "No se pudo procesar el documento tras múltiples intentos.",
-    );
+
+    throw new Error("Se agotaron los intentos. Verifique su API Key o conexión.");
   }
 
   _sleep(ms) {
