@@ -70,14 +70,14 @@ class GeminiService {
 
     const base64Data = await this._arrayBufferToBase64(fileBuffer);
     
-    // Configuraciones a probar, inspiradas en ChepitApp (Working Code)
-    // El SDK nuevo permite pasar { apiVersion: 'v1' } o 'v1beta'
+    // Configuraciones EXACTAS de ChepitApp (Working Code)
     const configurations = [
-      { model: "gemini-1.5-flash", version: "v1" },      // Prioridad ChepitApp
-      { model: "gemini-1.5-flash", version: "v1beta" },  // Estándar
-      { model: "gemini-1.5-pro", version: "v1" },
-      { model: "gemini-1.5-pro", version: "v1beta" },
-      { model: "gemini-2.0-flash-exp", version: "v1beta" }
+        { model: "gemini-1.5-flash", version: "v1" },
+        { model: "gemini-flash-latest", version: "v1beta" },
+        { model: "gemini-pro-latest", version: "v1beta" },
+        { model: "gemini-2.0-flash", version: "v1beta" },
+        { model: "gemini-2.5-flash", version: "v1beta" },
+        { model: "models/gemini-1.5-flash", version: "v1beta" }
     ];
 
     let retries = 10;
